@@ -136,7 +136,7 @@ void loop()
 {
   pubSubCheckConnect();
 
-  if (millis() - lastPublish > 60 * 1000)
+  if (millis() - lastPublish > 60 * 15 * 1000)
   {
     sendPing();
     lastPublish = millis();
