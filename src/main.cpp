@@ -1,12 +1,13 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 #include <Arduino.h>
+#include "externs.h"
 #include <ArduinoJson.h>
 #include "web_server.h"
 #include "secrets.h"
 
-int relayState = LOW;
-const int relayPin = D1;
+bool relayState = 0;
+int relayPin = D1;
 
 // diode with common +
 const int redLightPin = D6;
@@ -139,7 +140,30 @@ void loop()
   {
     sendPing();
     lastPublish = millis();
+    cleanupWsClients();
   }
+}
+
+void handleMessage(String message)
+{
+  if (message == "getConfig")
+  {
+    unsigned long epochTime;
+    epochTime = getTime();
+    char outputData[256];
+    String localIp = WiFi.localIP().toString();
+    sprintf(outputData, "{\"timestamp\": %ld, \"localIp\": \"%s\"}", epochTime, localIp.c_str());
+    pubSubClient.publish(thingMqttTopicOut, outputData);
+
+    Serial.println("Published MQTT Ping");
+  }
+}
+
+void toggleRelayStateChange()
+{
+  digitalWrite(relayPin, relayState);
+  Serial.print("Toggle Relay State Change To: ");
+  Serial.println(relayState);
 }
 
 void msgReceived(char *topic, byte *payload, unsigned int length)
@@ -157,20 +181,24 @@ void msgReceived(char *topic, byte *payload, unsigned int length)
   JsonObject obj = doc.as<JsonObject>();
 
   bool light_on = obj[F("light_on")];
-  Serial.print("light");
-  Serial.println(light_on);
 
   if (light_on == true && relayState == LOW)
   {
     relayState = HIGH;
-    digitalWrite(relayPin, relayState);
+    toggleRelayStateChange();
   }
   if (light_on == false && relayState == HIGH)
   {
     relayState = LOW;
-    digitalWrite(relayPin, relayState);
+    toggleRelayStateChange();
   }
 
+  if (obj.containsKey("message"))
+  {
+    String message = obj["message"];
+
+    handleMessage(message);
+  }
   if (obj.containsKey("red"))
   {
     uint red = obj[F("red")];
