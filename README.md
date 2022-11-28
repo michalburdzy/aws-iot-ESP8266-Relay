@@ -10,3 +10,9 @@
   "blue": 0
 }
 ```
+
+```
+{
+  "message": "getConfig"
+}
+```

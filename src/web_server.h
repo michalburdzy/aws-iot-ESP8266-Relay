@@ -1,6 +1,7 @@
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include "externs.h"
+#include <ArduinoJson.h>
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
@@ -10,7 +11,8 @@ const char index_html[] PROGMEM = R"rawliteral(
   <!DOCTYPE HTML>
   <html>
     <head>
-        <title>D1-Mini-Relay Web Server</title>
+        <title>D1-Mini Web Server</title>
+        <link rel="shortcut icon" href="https://img.icons8.com/emoji/2x/light-bulb-emoji.png">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link rel="icon" href="data:,">
         <style>
@@ -104,20 +106,37 @@ const char index_html[] PROGMEM = R"rawliteral(
             box-shadow: 0 0.4vh #773321;
             background-image: linear-gradient(to right, transparent 11vh, transparent 12vh, transparent 13vh),linear-gradient( 40deg, transparent 5%% 24%%, #0000001f 28%% 36%%, #00000011 37%% 44%%, transparent 50%%, #ffffff1c 56%%, #ffffff44 68%%, #ffffff1c 92%%, transparent);
           }
-        </style>
-        <title>D1-Mini-Relay</title>
+          input.rounded {
+          height: 2rem;
+          border: 1px solid #ccc;
+          -moz-border-radius: 10px;
+          -webkit-border-radius: 10px;
+          border-radius: 10px;
+          -moz-box-shadow: 2px 2px 3px #666;
+          -webkit-box-shadow: 2px 2px 3px #666;
+          box-shadow: 2px 2px 3px #666;
+          font-size: 20px;
+          padding: 4px 7px;
+          outline: 0;
+          -webkit-appearance: none;
+        }
+        input.rounded:focus {
+          border-color: #339933;
+        }
+      </style>
+        <title>D1-Mini</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link rel="icon" href="data:,">
     </head>
     <body>
         <div class="topnav">
-          <h1>D1-Mini-Relay Web Server</h1>
+          <h1>D1-Mini Web Server</h1>
         </div>
         <div class="content">
           <div class="lamp">
             <div class="shade"></div>
             <div class="leg"></div>
-            <div class="foot"></div>
+            <input id="color_input" type="color" class="foot rounded" />
           </div>
           <div class="card">
             <h2>Output - GPIO %LEDPIN%</h2>
@@ -126,43 +145,89 @@ const char index_html[] PROGMEM = R"rawliteral(
           </div>
         </div>
         <script>
-          var gateway = `ws://${window.location.hostname}/ws`;
-          var websocket;
-          window.addEventListener('load', onLoad);
-          function initWebSocket() {
-            console.log('Trying to open a WebSocket connection...');
+          const gateway = `ws://${window.location.hostname}/ws`;
+          let websocket;
+          let lastColorChangeMessageTime = 0;
+          let colorChangeMessageTimeout = 50;
+
+          const initWebSocket = () => {
+            console.log("Trying to open a WebSocket connection...");
             websocket = new WebSocket(gateway);
-            websocket.onopen    = onOpen;
-            websocket.onclose   = onClose;
+            websocket.onopen = onOpen;
+            websocket.onclose = onClose;
             websocket.onmessage = onMessage; // <-- add this line
-          }
-          function onOpen(event) {
-            console.log('Connection opened');
-          }
-          function onClose(event) {
-            console.log('Connection closed');
+          };
+          const onOpen = (event) => {
+            console.log("Connection opened");
+          };
+          const onClose = (event) => {
+            console.log("Connection closed");
             setTimeout(initWebSocket, 2000);
-          }
-          function onMessage(event) {
-            var state;
-            if (event.data == "1"){
+          };
+          const onMessage = (event) => {
+            let state;
+            if (event.data == "1") {
               state = "ON";
-            }
-            else{
+            } else {
               state = "OFF";
             }
-            document.getElementById('relay_state').innerHTML = state;
-          }
-          function onLoad(event) {
+            document.getElementById("relay_state").innerHTML = state;
+          };
+          const onLoad = (event) => {
             initWebSocket();
             initButton();
-          }
-          function initButton() {
-            document.getElementById('light_button').addEventListener('click', toggle_light);
-          }
-          function toggle_light(){
-            websocket.send('toggle_light');
-          }
+            initColorInput();
+          };
+          const initButton = () => {
+            document
+              .getElementById("light_button")
+              .addEventListener("click", toggle_light, 1000);
+          };
+          const toggle_light = () => {
+            websocket.send("toggle_light");
+          };
+          const initColorInput = () => {
+            document
+              .getElementById("color_input")
+              .addEventListener("input", onColorChange);
+          };
+          const onColorChange = (e) => {
+            if (!e) return;
+
+            const hexValue = e.target.value;
+            const websocketPayload = hexToWebsocketPayload(hexValue);
+
+            const now = new Date().getTime();
+            const canSendColorChangeMessage =
+              now > lastColorChangeMessageTime + colorChangeMessageTimeout;
+            if (canSendColorChangeMessage) {
+              lastColorChangeMessageTime = new Date().getTime();
+              websocket.send(JSON.stringify(websocketPayload));
+            }
+          };
+
+          const invertNumberBase255 = (number) => {
+            return Math.abs(255 - number);
+          };
+
+          const hexToWebsocketPayload = (h) => {
+            const payload = {};
+
+            if (h.length == 4) {
+              payload.red = invertNumberBase255(parseInt("0x" + h[1] + h[1], "hex"));
+              payload.green = invertNumberBase255(parseInt("0x" + h[2] + h[2], "hex"));
+              payload.blue = invertNumberBase255(parseInt("0x" + h[3] + h[3], "hex"));
+            } else if (h.length == 7) {
+              payload.red = invertNumberBase255(parseInt("0x" + h[1] + h[2], "hex"));
+              payload.green = invertNumberBase255(parseInt("0x" + h[3] + h[4], "hex"));
+              payload.blue = invertNumberBase255(parseInt("0x" + h[5] + h[6], "hex"));
+            }
+
+            return payload;
+          };
+
+          window.addEventListener("load", onLoad);
+
         </script>
     </body>
   </html>
@@ -181,10 +246,39 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len)
     data[len] = 0;
     if (strcmp((char *)data, "toggle_light") == 0)
     {
-      Serial.println("received websocket message \"toggle_light\"");
       relayState = !relayState;
       toggleRelayStateChange();
       notifyClients();
+    }
+    else
+    {
+      // Serial.println((char *)data);
+      StaticJsonDocument<256> doc;
+      deserializeJson(doc, data, len);
+      JsonObject obj = doc.as<JsonObject>();
+
+      bool objContainsAnyColorField = obj.containsKey("red") || obj.containsKey("green") || obj.containsKey("blue");
+      if (objContainsAnyColorField)
+      {
+        int incomingRed = 255;
+        int incomingGreen = 255;
+        int incomingBlue = 255;
+
+        if (obj.containsKey("red"))
+        {
+          incomingRed = obj["red"];
+        }
+        if (obj.containsKey("green"))
+        {
+          incomingGreen = obj["green"];
+        }
+        if (obj.containsKey("blue"))
+        {
+          incomingBlue = obj["blue"];
+        }
+
+        writeColors(incomingRed, incomingGreen, incomingBlue);
+      }
     }
   }
 }
@@ -247,6 +341,47 @@ void setupWebServer()
   initWebSocket();
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
             { request->send_P(200, "text/html", index_html, processor); });
+
+  server.on("/update", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send(200, "text/html", "<form method='POST' action='/update' enctype='multipart/form-data'><input type='file' name='update'><input type='submit' value='Update'></form>"); });
+  server.on(
+      "/update", HTTP_POST, [](AsyncWebServerRequest *request)
+      {
+    shouldReboot = !Update.hasError();
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", shouldReboot?"OK":"FAIL");
+    response->addHeader("Connection", "close");
+    request->send(response); },
+      [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final)
+      {
+        if (!index)
+        {
+          Serial.printf("Update Start: %s\n", filename.c_str());
+          Update.runAsync(true);
+          if (!Update.begin((ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000))
+          {
+            Update.printError(Serial);
+          }
+        }
+        if (!Update.hasError())
+        {
+          if (Update.write(data, len) != len)
+          {
+            Update.printError(Serial);
+          }
+        }
+        if (final)
+        {
+          if (Update.end(true))
+          {
+            Serial.printf("Update Success: %uB\n", index + len);
+          }
+          else
+          {
+            Update.printError(Serial);
+          }
+        }
+      });
+
   server.begin();
 }
 

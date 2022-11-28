@@ -8,6 +8,7 @@
 
 bool relayState = 0;
 int relayPin = D1;
+bool shouldReboot = false;
 
 // diode with common +
 const int redLightPin = D6;
@@ -69,6 +70,8 @@ void blinkColors()
   analogWrite(redLightPin, 0);
   analogWrite(greenLightPin, 0);
   analogWrite(blueLightPin, 0);
+
+  delay(1000);
 
   analogWrite(redLightPin, 255);
   analogWrite(greenLightPin, 255);
@@ -134,6 +137,13 @@ void sendPing()
 
 void loop()
 {
+  if (shouldReboot)
+  {
+    Serial.println("Rebooting...");
+    delay(100);
+    ESP.restart();
+  }
+
   pubSubCheckConnect();
 
   if (millis() - lastPublish > 60 * 15 * 1000)
@@ -164,6 +174,20 @@ void toggleRelayStateChange()
   digitalWrite(relayPin, relayState);
   Serial.print("Toggle Relay State Change To: ");
   Serial.println(relayState);
+}
+
+void writeColors(int red, int green, int blue)
+{
+  Serial.print("red: ");
+  Serial.println(red);
+  Serial.print("green: ");
+  Serial.println(green);
+  Serial.print("blue: ");
+  Serial.println(blue);
+
+  analogWrite(redLightPin, red);
+  analogWrite(greenLightPin, green);
+  analogWrite(blueLightPin, blue);
 }
 
 void msgReceived(char *topic, byte *payload, unsigned int length)
