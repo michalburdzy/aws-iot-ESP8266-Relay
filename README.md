@@ -24,14 +24,14 @@ Relay shield: [link to official board documentation](https://www.wemos.cc/en/lat
 
 ## Photo / Video Documentation
 
-![screenshot 1:](./screenshots/photo1.jpg)
+![screenshot 1](./screenshots/photo1.jpg)
 
-![screenshot 2:](./screenshots/photo2.jpg)
+![screenshot 2](./screenshots/photo2.jpg)
 
-![screenshot 3:](./screenshots/photo3.jpg)
+![screenshot 3](./screenshots/photo3.jpg)
 
-![recording 1 (AWS CLI integration):](./screenshots/OK.gif)
+![recording 1 (AWS CLI integration)](./screenshots/OK.gif)
 
-![recording 2 (AWS IoT MQTT client integration):](./screenshots/OK2.gif)
+![recording 2 (AWS IoT MQTT client integration)](./screenshots/OK2.gif)
 
-![recording 3 (self-served website integration):](./screenshots/OK3.gif)
+![recording 3 (self-served website integration)](./screenshots/OK3.gif)

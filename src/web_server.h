@@ -260,24 +260,20 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len)
       bool objContainsAnyColorField = obj.containsKey("red") || obj.containsKey("green") || obj.containsKey("blue");
       if (objContainsAnyColorField)
       {
-        int incomingRed = 255;
-        int incomingGreen = 255;
-        int incomingBlue = 255;
-
         if (obj.containsKey("red"))
         {
-          incomingRed = obj["red"];
+          redLightValue = obj["red"];
         }
         if (obj.containsKey("green"))
         {
-          incomingGreen = obj["green"];
+          greenLightValue = obj["green"];
         }
         if (obj.containsKey("blue"))
         {
-          incomingBlue = obj["blue"];
+          blueLightValue = obj["blue"];
         }
 
-        writeColors(incomingRed, incomingGreen, incomingBlue);
+        writeColors();
       }
     }
   }

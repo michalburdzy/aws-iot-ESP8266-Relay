@@ -10,10 +10,17 @@ bool relayState = 0;
 int relayPin = D1;
 bool shouldReboot = false;
 
-// diode with common +
-const int redLightPin = D6;
-const int greenLightPin = D7;
-const int blueLightPin = D8;
+// using diode with common +, so the values written to it have to be inverted
+// e.g. to turn the color on, provide value "0", while value "255" turns it off
+uint redLightPin = D6;
+uint greenLightPin = D7;
+uint blueLightPin = D8;
+
+uint redLightValue = 255;
+uint greenLightValue = 255;
+uint blueLightValue = 255;
+
+bool shouldSendInitialPing = true;
 
 BearSSL::X509List client_crt(deviceCertificatePemCrt);
 BearSSL::PrivateKey client_key(devicePrivatePemKey);
@@ -55,56 +62,92 @@ void pubSubCheckConnect()
     Serial.print(awsEndpoint);
     while (!pubSubClient.connected())
     {
-      Serial.print("PubSubClient state:");
-      Serial.print(pubSubClient.state());
+      analogWrite(redLightPin, 100);
+      analogWrite(blueLightPin, 100);
+      Serial.print("PubSubClient state: ");
+      Serial.println(pubSubClient.state());
       pubSubClient.connect(thingName);
     }
+
     Serial.println(" connected");
     pubSubClient.subscribe(thingMqttTopicIn);
+  }
+  else
+  {
+    analogWrite(redLightPin, redLightValue);
+    analogWrite(greenLightPin, greenLightValue);
   }
   pubSubClient.loop();
 }
 
-void blinkColors()
+void writeColors()
 {
-  analogWrite(redLightPin, 0);
-  analogWrite(greenLightPin, 0);
-  analogWrite(blueLightPin, 0);
+  analogWrite(redLightPin, redLightValue);
+  analogWrite(greenLightPin, greenLightValue);
+  analogWrite(blueLightPin, blueLightValue);
+}
 
-  delay(1000);
+void redLight()
+{
+  redLightValue = 0;
+  greenLightValue = 255;
+  blueLightValue = 255;
+  writeColors();
+}
 
-  analogWrite(redLightPin, 255);
-  analogWrite(greenLightPin, 255);
-  analogWrite(blueLightPin, 255);
+void greenLight()
+{
+  redLightValue = 255;
+  greenLightValue = 0;
+  blueLightValue = 255;
+  writeColors();
+}
 
-  analogWrite(redLightPin, 0);
-  delay(500);
-  analogWrite(redLightPin, 255);
-  analogWrite(blueLightPin, 0);
-  delay(500);
-  analogWrite(blueLightPin, 255);
-  analogWrite(greenLightPin, 0);
-  delay(500);
-  analogWrite(greenLightPin, 255);
+void blueLight()
+{
+  redLightValue = 255;
+  greenLightValue = 255;
+  blueLightValue = 0;
+  writeColors();
+}
+
+void noColor()
+{
+  redLightValue = 255;
+  greenLightValue = 255;
+  blueLightValue = 255;
+  writeColors();
+}
+
+void publishMqttMessage(char *outputData)
+{
+  // analogWrite(redLightPin, 200);
+  // analogWrite(blueLightPin, 200);
+  pubSubClient.publish(thingMqttTopicOut, outputData);
+  Serial.println("Published MQTT Message");
+  // analogWrite(redLightPin, redLightValue);
+  // analogWrite(blueLightPin, blueLightValue);
 }
 
 void setup()
 {
-  Serial.begin(9600);
-  Serial.println();
-  Serial.println("AWS IoT MQTT Connection");
-
   pinMode(relayPin, OUTPUT);
   pinMode(redLightPin, OUTPUT);
   pinMode(greenLightPin, OUTPUT);
   pinMode(blueLightPin, OUTPUT);
 
+  redLight();
+
+  Serial.begin(9600);
+  Serial.println("AWS IoT MQTT Connection");
   Serial.print("Connecting to ");
   Serial.print(ssid);
   WiFi.begin(ssid, password);
   WiFi.waitForConnectResult();
   Serial.print(", WiFi connected, IP address: ");
   Serial.println(WiFi.localIP());
+
+  blueLight();
 
   // get current time, otherwise certificates are flagged as expired
   setCurrentTime();
@@ -114,7 +157,9 @@ void setup()
 
   setupWebServer();
 
-  blinkColors();
+  greenLight();
+  delay(500);
+  noColor();
 }
 
 unsigned long
@@ -130,9 +175,7 @@ void sendPing()
   epochTime = getTime();
   char outputData[256];
   sprintf(outputData, "{\"timestamp\": %ld, \"message\": \"ping\"}", epochTime);
-  pubSubClient.publish(thingMqttTopicOut, outputData);
-
-  Serial.println("Published MQTT Ping");
+  publishMqttMessage(outputData);
 }
 
 void loop()
@@ -146,26 +189,32 @@ void loop()
 
   pubSubCheckConnect();
 
-  if (millis() - lastPublish > 60 * 15 * 1000)
+  if (shouldSendInitialPing || millis() - lastPublish > 60 * 1000)
   {
     sendPing();
     lastPublish = millis();
     cleanupWsClients();
+    shouldSendInitialPing = false;
   }
 }
 
 void handleMessage(String message)
 {
+  unsigned long epochTime;
+  epochTime = getTime();
+  char outputData[256];
   if (message == "getConfig")
   {
-    unsigned long epochTime;
-    epochTime = getTime();
-    char outputData[256];
     String localIp = WiFi.localIP().toString();
     sprintf(outputData, "{\"timestamp\": %ld, \"localIp\": \"%s\"}", epochTime, localIp.c_str());
-    pubSubClient.publish(thingMqttTopicOut, outputData);
+    publishMqttMessage(outputData);
+  }
 
-    Serial.println("Published MQTT Ping");
+  if (message == "ping")
+  {
+    String localIp = WiFi.localIP().toString();
+    sprintf(outputData, "{\"timestamp\": %ld, \"message\": \"pong\"}", epochTime);
+    publishMqttMessage(outputData);
   }
 }
 
@@ -174,20 +223,6 @@ void toggleRelayStateChange()
   digitalWrite(relayPin, relayState);
   Serial.print("Toggle Relay State Change To: ");
   Serial.println(relayState);
-}
-
-void writeColors(int red, int green, int blue)
-{
-  Serial.print("red: ");
-  Serial.println(red);
-  Serial.print("green: ");
-  Serial.println(green);
-  Serial.print("blue: ");
-  Serial.println(blue);
-
-  analogWrite(redLightPin, red);
-  analogWrite(greenLightPin, green);
-  analogWrite(blueLightPin, blue);
 }
 
 void msgReceived(char *topic, byte *payload, unsigned int length)
@@ -225,17 +260,16 @@ void msgReceived(char *topic, byte *payload, unsigned int length)
   }
   if (obj.containsKey("red"))
   {
-    uint red = obj[F("red")];
-    analogWrite(redLightPin, red);
+    redLightValue = obj[F("red")];
   }
   if (obj.containsKey("green"))
   {
-    uint green = obj[F("green")];
-    analogWrite(greenLightPin, green);
+    greenLightValue = obj[F("green")];
   }
   if (obj.containsKey("blue"))
   {
-    uint blue = obj[F("blue")];
-    analogWrite(blueLightPin, blue);
+    blueLightValue = obj[F("blue")];
   }
+
+  writeColors();
 }
